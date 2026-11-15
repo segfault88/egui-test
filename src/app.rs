@@ -24,6 +24,13 @@ pub struct App {
     ambient: f32,
     /// Whether the spheres cast shadows on each other.
     shadows: bool,
+    /// Smoothed time between frames, in seconds.
+    frame_time: f32,
+    /// Smoothed CPU time spent producing a frame, in seconds. Unlike `frame_time` this excludes
+    /// waiting for vsync, so it shows how much headroom there is.
+    cpu_time: f32,
+    /// Whether presentation waits for the display's refresh. Native only.
+    vsync: bool,
     /// Description of the GPU adapter wgpu picked (Metal/Vulkan/DX12 natively, WebGPU in the browser).
     adapter_summary: String,
 }
@@ -51,6 +58,9 @@ impl App {
             light_elevation: 10f32.to_radians(),
             ambient: 0.03,
             shadows: true,
+            frame_time: 0.0,
+            cpu_time: 0.0,
+            vsync: true,
             adapter_summary,
         }
     }
@@ -66,8 +76,23 @@ impl App {
     }
 }
 
+/// Updates an exponential moving average.
+fn smooth(average: &mut f32, sample: f32) {
+    *average = if *average == 0.0 { sample } else { *average + 0.05 * (sample - *average) };
+}
+
 impl eframe::App for App {
     fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
+        // Exponential moving average of the real time since the previous frame.
+        let dt = ui.input(|i| i.unstable_dt);
+        smooth(&mut self.frame_time, dt);
+        // eframe times the previous frame for us: running this function, tessellating the UI,
+        // and encoding and submitting the GPU commands. It does not include the time the GPU
+        // then takes to execute them.
+        if let Some(cpu_time) = frame.info().cpu_usage {
+            smooth(&mut self.cpu_time, cpu_time);
+        }
+
         if self.animate {
             let dt = ui.input(|i| i.stable_dt);
             self.moon_angle = (self.moon_angle + self.orbit_speed * dt).rem_euclid(TAU);
@@ -125,6 +150,40 @@ impl eframe::App for App {
                     ui.separator();
                     ui.label(if frame.is_web() { "Running on the web" } else { "Running natively" });
                 });
+
+                if self.animate {
+                    ui.monospace(format!(
+                        "frame {:5.2} ms ({:.0} fps)",
+                        self.frame_time * 1000.0,
+                        1.0 / self.frame_time
+                    ));
+                    ui.monospace(format!(
+                        "cpu   {:5.2} ms ({:.0}% of frame)",
+                        self.cpu_time * 1000.0,
+                        100.0 * self.cpu_time / self.frame_time
+                    ))
+                    .on_hover_text(
+                        "Time spent building the UI and encoding GPU commands, excluding the wait for vsync \
+                         and the GPU's own execution time.",
+                    );
+                } else {
+                    // egui only repaints on input when nothing is animating.
+                    ui.monospace("not animating: no steady frame rate");
+                }
+
+                // Browsers always present in step with the display, so this is native only.
+                // With vsync off, the frame rate above is the true limit, GPU included.
+                if !frame.is_web()
+                    && ui.checkbox(&mut self.vsync, "Vsync").changed()
+                    && let Some(mut config) = frame.wgpu_surface_config()
+                {
+                    config.present_mode = if self.vsync {
+                        egui_wgpu::wgpu::PresentMode::AutoVsync
+                    } else {
+                        egui_wgpu::wgpu::PresentMode::AutoNoVsync
+                    };
+                    frame.set_wgpu_surface_config(config);
+                }
 
                 ui.collapsing("wgpu adapter", |ui| {
                     ui.add(egui::Label::new(egui::RichText::new(&self.adapter_summary).monospace()).wrap());
