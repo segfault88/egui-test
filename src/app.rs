@@ -22,6 +22,8 @@ pub struct App {
     light_elevation: f32,
     /// Amount of light that reaches surfaces facing away from the light.
     ambient: f32,
+    /// Whether the spheres cast shadows on each other.
+    shadows: bool,
     /// Description of the GPU adapter wgpu picked (Metal/Vulkan/DX12 natively, WebGPU in the browser).
     adapter_summary: String,
 }
@@ -45,9 +47,10 @@ impl App {
             moon_angle: 0.0,
             animate: true,
             orbit_speed: 0.5,
-            light_azimuth: 0.0,
-            light_elevation: 15f32.to_radians(),
+            light_azimuth: 0.5,
+            light_elevation: 10f32.to_radians(),
             ambient: 0.03,
+            shadows: true,
             adapter_summary,
         }
     }
@@ -87,6 +90,7 @@ impl eframe::App for App {
                 moon_angle: self.moon_angle,
                 light_direction: self.light_direction(),
                 ambient: self.ambient,
+                shadows: self.shadows,
             },
         );
 
@@ -112,6 +116,7 @@ impl eframe::App for App {
                     egui::Slider::new(&mut self.light_elevation, -FRAC_PI_2..=FRAC_PI_2).text("light elevation (rad)"),
                 );
                 ui.add(egui::Slider::new(&mut self.ambient, 0.0..=0.5).text("ambient light"));
+                ui.checkbox(&mut self.shadows, "Shadows");
 
                 ui.separator();
 
