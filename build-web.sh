@@ -31,7 +31,8 @@ fi
 
 cargo build --target wasm32-unknown-unknown ${CARGO_FLAGS[@]+"${CARGO_FLAGS[@]}"}
 
-rm -rf dist
+# Empty dist/ rather than deleting it, so a running `--serve` keeps working.
+rm -rf dist/*
 mkdir -p dist
 "$WB" "target/wasm32-unknown-unknown/$PROFILE/egui-test.wasm" \
     --out-dir dist --out-name egui_test --target web --no-typescript

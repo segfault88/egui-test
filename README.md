@@ -30,6 +30,7 @@ Every push to `main` builds the web version and publishes it to GitHub Pages via
 
 ## Layout
 
-- `src/app.rs` – the UI, shared by both targets
+- `src/app.rs` – app state and the egui controls window, shared by both targets
+- `src/triangle.rs`, `src/triangle.wgsl` – custom wgpu rendering, drawn behind the UI
 - `src/main.rs` – native and web entry points
 - `index.html` – page hosting the canvas for the web build
