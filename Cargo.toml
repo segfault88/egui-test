@@ -9,6 +9,7 @@ bytemuck = { version = "1.25.2", features = ["derive"] }
 # egui-wgpu); natively it opens the window with winit, and on the web it drives
 # a <canvas>. It re-exports `egui`, `egui_wgpu` and `wgpu`.
 eframe = "0.37.0"
+glam = { version = "0.34.3", features = ["bytemuck"] }
 log = "0.4.35"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]

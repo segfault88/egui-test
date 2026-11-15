@@ -1,5 +1,7 @@
 mod app;
-mod triangle;
+mod camera;
+mod scene;
+mod sphere;
 
 use app::App;
 
@@ -10,8 +12,10 @@ fn main() -> eframe::Result {
 
     let native_options = eframe::NativeOptions {
         viewport: eframe::egui::ViewportBuilder::default()
-            .with_inner_size([480.0, 360.0])
+            .with_inner_size([960.0, 640.0])
             .with_min_inner_size([320.0, 240.0]),
+        // The 3D scene needs a depth buffer in egui's render pass.
+        depth_buffer: scene::DEPTH_BITS,
         ..Default::default()
     };
 
@@ -46,7 +50,11 @@ fn main() {
         let result = eframe::WebRunner::new()
             .start(
                 canvas,
-                eframe::WebOptions::default(),
+                eframe::WebOptions {
+                    // The 3D scene needs a depth buffer in egui's render pass.
+                    depth_buffer: scene::DEPTH_BITS,
+                    ..Default::default()
+                },
                 Box::new(|cc| Ok(Box::new(App::new(cc)))),
             )
             .await;
