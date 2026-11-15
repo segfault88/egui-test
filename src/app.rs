@@ -1,4 +1,4 @@
-use std::f32::consts::TAU;
+use std::f32::consts::{FRAC_PI_2, TAU};
 
 use eframe::{egui, egui_wgpu};
 
@@ -16,6 +16,12 @@ pub struct App {
     animate: bool,
     /// Orbit speed while animating, in radians per second.
     orbit_speed: f32,
+    /// Compass direction of the light, in radians.
+    light_azimuth: f32,
+    /// Angle of the light above the moon's orbital plane, in radians.
+    light_elevation: f32,
+    /// Amount of light that reaches surfaces facing away from the light.
+    ambient: f32,
     /// Description of the GPU adapter wgpu picked (Metal/Vulkan/DX12 natively, WebGPU in the browser).
     adapter_summary: String,
 }
@@ -39,8 +45,21 @@ impl App {
             moon_angle: 0.0,
             animate: true,
             orbit_speed: 0.5,
+            light_azimuth: 0.0,
+            light_elevation: 15f32.to_radians(),
+            ambient: 0.03,
             adapter_summary,
         }
+    }
+
+    /// Unit vector pointing from the scene towards the light.
+    fn light_direction(&self) -> glam::Vec3 {
+        let (azimuth, elevation) = (self.light_azimuth, self.light_elevation);
+        glam::Vec3::new(
+            elevation.cos() * azimuth.cos(),
+            elevation.sin(),
+            elevation.cos() * azimuth.sin(),
+        )
     }
 }
 
@@ -64,7 +83,10 @@ impl eframe::App for App {
             rect,
             SceneParams {
                 view_proj: self.camera.view_proj(rect.aspect_ratio()),
+                camera_position: self.camera.position(),
                 moon_angle: self.moon_angle,
+                light_direction: self.light_direction(),
+                ambient: self.ambient,
             },
         );
 
@@ -82,6 +104,14 @@ impl eframe::App for App {
                     egui::Slider::new(&mut self.orbit_speed, -3.0..=3.0).text("orbit speed (rad/s)"),
                 );
                 ui.add(egui::Slider::new(&mut self.moon_angle, 0.0..=TAU).text("moon angle (rad)"));
+
+                ui.separator();
+
+                ui.add(egui::Slider::new(&mut self.light_azimuth, 0.0..=TAU).text("light azimuth (rad)"));
+                ui.add(
+                    egui::Slider::new(&mut self.light_elevation, -FRAC_PI_2..=FRAC_PI_2).text("light elevation (rad)"),
+                );
+                ui.add(egui::Slider::new(&mut self.ambient, 0.0..=0.5).text("ambient light"));
 
                 ui.separator();
 

@@ -10,7 +10,7 @@ use eframe::{
     egui,
     egui_wgpu::{self, wgpu},
 };
-use glam::{Mat4, Vec3};
+use glam::{Mat4, Vec3, Vec4};
 use wgpu::util::DeviceExt as _;
 
 use crate::sphere;
@@ -19,18 +19,26 @@ use crate::sphere;
 /// and it is drawn inside egui's render pass.
 pub const DEPTH_BITS: u8 = 32;
 
+// Colors are in linear space.
 const PLANET_RADIUS: f32 = 1.0;
-const PLANET_COLOR: [f32; 4] = [0.12, 0.3, 0.9, 1.0];
+const PLANET_COLOR: [f32; 4] = [0.02, 0.12, 0.8, 1.0];
 const MOON_RADIUS: f32 = 0.27;
-const MOON_COLOR: [f32; 4] = [0.2, 0.75, 0.25, 1.0];
+const MOON_COLOR: [f32; 4] = [0.04, 0.5, 0.07, 1.0];
 const MOON_ORBIT_RADIUS: f32 = 2.6;
 
 /// Everything needed to draw one frame of the scene.
 pub struct SceneParams {
     /// World space -> clip space for the camera.
     pub view_proj: Mat4,
+    /// Camera position in world space.
+    pub camera_position: Vec3,
     /// Where the moon is on its (circular) orbit, in radians.
     pub moon_angle: f32,
+    /// Unit vector pointing from the scene towards the light. The light is infinitely far away
+    /// (like the sun), so its rays are parallel.
+    pub light_direction: Vec3,
+    /// Amount of light that reaches surfaces facing away from the light.
+    pub ambient: f32,
 }
 
 /// Must match `Globals` in `scene.wgsl`.
@@ -38,6 +46,11 @@ pub struct SceneParams {
 #[derive(Clone, Copy, bytemuck::Pod, bytemuck::Zeroable)]
 struct Globals {
     view_proj: Mat4,
+    camera_position: Vec4,
+    light_direction: Vec4,
+    ambient: f32,
+    encode_srgb: f32,
+    _pad: [f32; 2],
 }
 
 /// Must match `InstanceInput` in `scene.wgsl`.
@@ -58,9 +71,14 @@ impl Instance {
 }
 
 impl SceneParams {
-    fn globals(&self) -> Globals {
+    fn globals(&self, encode_srgb: bool) -> Globals {
         Globals {
             view_proj: self.view_proj,
+            camera_position: self.camera_position.extend(1.0),
+            light_direction: self.light_direction.extend(0.0),
+            ambient: self.ambient,
+            encode_srgb: if encode_srgb { 1.0 } else { 0.0 },
+            _pad: [0.0; 2],
         }
     }
 
@@ -83,6 +101,9 @@ pub struct SceneRenderer {
     vertex_buffer: wgpu::Buffer,
     index_buffer: wgpu::Buffer,
     index_count: u32,
+    /// The lighting is computed in linear color space. If the render target isn't an sRGB
+    /// format (egui prefers ones that aren't), the shader must do the conversion itself.
+    encode_srgb: bool,
 }
 
 impl SceneRenderer {
@@ -202,6 +223,7 @@ impl SceneRenderer {
             vertex_buffer,
             index_buffer,
             index_count: indices.len() as u32,
+            encode_srgb: !render_state.target_format.is_srgb(),
         });
     }
 }
@@ -229,7 +251,7 @@ impl egui_wgpu::CallbackTrait for SceneCallback {
         resources: &mut egui_wgpu::CallbackResources,
     ) -> Vec<wgpu::CommandBuffer> {
         if let Some(renderer) = resources.get::<SceneRenderer>() {
-            queue.write_buffer(&renderer.globals_buffer, 0, bytemuck::bytes_of(&self.params.globals()));
+            queue.write_buffer(&renderer.globals_buffer, 0, bytemuck::bytes_of(&self.params.globals(renderer.encode_srgb)));
             queue.write_buffer(
                 &renderer.instance_buffer,
                 0,
